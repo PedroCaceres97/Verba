@@ -1,0 +1,1 @@
+  -L"C:/Dev/Libs/curl-8.17.0_5-win64-mingw/lib"  -lcurl -lws2_32 -lcrypt32 -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

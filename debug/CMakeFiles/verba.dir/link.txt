@@ -1,0 +1,3 @@
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\verba.dir/objects.a
+C:\Compilers\MinGW\bin\ar.exe qc CMakeFiles\verba.dir/objects.a @CMakeFiles\verba.dir\objects1.rsp
+C:\Compilers\MinGW\bin\gcc.exe -g -Wl,--whole-archive CMakeFiles\verba.dir/objects.a -Wl,--no-whole-archive -o verba.exe -Wl,--out-implib,libverba.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\verba.dir\linkLibs.rsp

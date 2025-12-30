@@ -1,0 +1,7 @@
+C:/Dev/Verba/debug/CMakeFiles/verba.dir
+C:/Dev/Verba/debug/CMakeFiles/edit_cache.dir
+C:/Dev/Verba/debug/CMakeFiles/rebuild_cache.dir
+C:/Dev/Verba/debug/CMakeFiles/list_install_components.dir
+C:/Dev/Verba/debug/CMakeFiles/install.dir
+C:/Dev/Verba/debug/CMakeFiles/install/local.dir
+C:/Dev/Verba/debug/CMakeFiles/install/strip.dir
