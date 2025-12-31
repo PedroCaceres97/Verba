@@ -112,9 +112,10 @@ typedef struct tui_box {
   int up, rt, dn, lt;   /* Padding up, right, down and left */  
   tui_style style;
   tui_box_type type;
+  tui_text_align align;
   
   union {
-    String    line;
+    String*   line;
     tui_page  page;
     tui_file  file;
   } data;

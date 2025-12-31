@@ -151,30 +151,23 @@ void tui_getkey(tui_key* key) {
  * Text
  * -------------------------------------------------------------------------- */
 
-static String* tui_format_line(const char* text, size_t* parsed) {
+static size_t tui_format_line(const char* text, String* line) {
   const char* nl = strchr(text, '\n');
   size_t size = nl ? (size_t)(nl - text) : strlen(text);
 
-  String* line = {0};
-  string_create(&line);
   string_resize(&line, size);
   string_strcpy(&line, 0, text, size);
 
-  *parsed = size + (nl != NULL);
-
-  return line;
+  return size + (nl != NULL);
 }
 
-void tui_format_text(const char* text) {
-  VECstr lines = vecstr_create(NULL);
-
+static void tui_format_lines(const char* text, VECstr* lines) {
   size_t len = strlen(text);
-  size_t parsed = 0;
 
   while(true) {
-    string str = tui_format_line(text);
-    tui_lines_push_back(lines, str);
-    parsed = str.size;
+    String* line = mem_slabstr_alloc();
+    size_t parsed = tui_format_line(text, line);
+    tui_lines_push_back(lines, line);
     if (parsed == len) {
       break;
     } else {
@@ -182,8 +175,6 @@ void tui_format_text(const char* text) {
       text += parsed;
     }
   };
-
-  return lines;
 };
 
 /* --------------------------------------------------------------------------
@@ -192,7 +183,7 @@ void tui_format_text(const char* text) {
 
 tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h, tui_box_type type) {
   if (!box) {
-    box = verba_calloc(tui_box, 1, "tui_box");
+    box = mem_calloc(tui_box, 1, "struct tui_box");
     box->allocated = true;
   } else {
     box->allocated = false;
@@ -204,20 +195,47 @@ tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h, tui_box_type 
   box->h = h;
   box->type = type;
 
-  if (type == TUI_LINE) {
-    string_create(&box->data.line);
-  } else if (type == TUI_PAGE) {
-    tui_lines_create(box->data.page.text);
+  switch (type) {
+    case TUI_LINE: {
+      box->data.line = mem_slabstr_alloc();
+      break;
+    }
+    case TUI_PAGE: {
+      vecstr_create(&box->data.page.text);
+      break;
+    }
+    case TUI_FILE: {
+      vecstr_create(&box->data.file.text);
+      break;
+    }
+    
+    default:
+      break;
   }
 
   return box;
 }
 void      tui_box_destroy(tui_box* box) {
-  tui_lines_clear(box->text);
-  tui_lines_destroy(box->text);
+  switch (box->type) {
+    case TUI_LINE: {
+      mem_slabstr_free(box->data.line);
+      break;
+    }
+    case TUI_PAGE: {
+      vecstr_destroy(&box->data.page.text);
+      break;
+    }
+    case TUI_FILE: {
+      vecstr_destroy(&box->data.file.text);
+      break;
+    }
+    
+    default:
+      break;
+  }
 
   if (box->allocated) {
-    verba_free(box);
+    mem_free(box);
   }
 }
 
@@ -228,8 +246,25 @@ void      tui_box_pad(tui_box* box, int up, int right, int down, int left) {
   box->lt = left;
 }
 void      tui_box_text(tui_box* box, const char* text, tui_text_align align) {
-  box->text = tui_format_text(text);
   box->align = align;
+
+  switch (box->type) {
+    case TUI_LINE: {
+      tui_format_line(text, box->data.line);
+      break;
+    }
+    case TUI_PAGE: {
+      tui_format_lines(text, &box->data.page.text);
+      break;
+    }
+    case TUI_FILE: {
+      tui_format_lines(text, &box->data.file.text);
+      break;
+    }
+    
+    default:
+      break;
+  }
 }
 void      tui_box_style(tui_box* box, const char* bg, const char* fg, const char* bg_s, const char* fg_s) {
   box->style.bg   = bg;
@@ -272,9 +307,9 @@ static void tui_draw_line(tui_box* box) {
   int align_x = 0;
   int align_y = 0;
 
-  string line = tui_lines_get(box->text, 0);
-  size_t len = line.size;
-  const char* cstr = line.data;
+  String* line = box->data.line;
+  size_t len = line->size;
+  const char* cstr = line->data;
 
   LOG_DEBUG("Drawing line...");
 
@@ -311,10 +346,10 @@ static void tui_draw_page(tui_box* box) {
 
   LOG_DEBUG("Drawing page...");
 
-  for (int i = 0; i < box->text->size && i < max_y; i++) {
-    string line = tui_lines_get(box->text, i); 
-    size_t len = line.size;
-    const char* cstr = line.data;
+  for (int i = 0; i < box->data.page.text.size && i < max_y; i++) {
+    String* line = vecstr_get(&box->data.page.text, i); 
+    size_t len = line->size;
+    const char* cstr = line->data;
     tui_puts(cstr, MIN(len, max_x), pos_x, pos_y + i, box->style.bg, box->style.fg);
   }
 }

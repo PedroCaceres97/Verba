@@ -11,7 +11,7 @@ size_t file_size(FILE* file) {
 }
 char*  file_dump(FILE* file) {
   size_t size = file_size(file);
-  char* dump = verba_malloc(char, size + 1, "File Dump");
+  char* dump = mem_malloc(char, size + 1, "File Dump");
   fread(dump, 1, size, file);
   dump[size] = '\0';
   return dump;
@@ -63,7 +63,7 @@ int main() {
     }
   }
 
-  free(lorem);
+  mem_free(lorem);
 
   ai_cleanup();
   tui_cleanup();

@@ -41,10 +41,10 @@ void*   mem_realloc_(void* ptr, size_t size, Context context) {
 }
 
 void    mem_slabstr_free(String* string) {
-
+  slabstr_free(&slabstr, string);
 }
 String* mem_slabstr_alloc() {
-
+  return slabstr_alloc(&slabstr);
 }
 
 void    mem_init() {
@@ -72,6 +72,7 @@ void    mem_cleanup() {
 
   if (slabstr.total > 0) {
     LOG_FATAL("Memory leaks detected (Slab String)");
+    slabstr_print(&slabstr);
     slabstr_clear(&slabstr);
     ABORT();
   }

@@ -23,7 +23,6 @@ add_executable(verba
 
 target_include_directories(verba PRIVATE
     src
-    ${BLOP_INCLUDE_DIR}
     ${CURL_INCLUDE_DIR}
     ${CJSON_INCLUDE_DIR}
 )

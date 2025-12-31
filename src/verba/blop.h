@@ -13,8 +13,8 @@
 #include <blop/string.h>
 
 #define VECTOR_NAME         VECstr
-#define VECTOR_DATA_TYPE    String
 #define VECTOR_FN_PREFIX    vecstr
+#define VECTOR_DATA_TYPE    String*
 #define VECTOR_STRUCT
 #include <blop/vector.h>
 
@@ -25,6 +25,7 @@
 
 #define SLAB_NAME           SLABstr
 #define SLAB_FN_PREFIX      slabstr
+#define SLAB_DATA_TYPE      String
 #define SLAB_STRUCT
 #include <blop/slab.h>
 
