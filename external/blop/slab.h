@@ -36,7 +36,8 @@
 #define fn_slab_alloc     CONCAT2(SLAB_FN_PREFIX, _alloc)
 
 #define fn_slab_size      CONCAT2(SLAB_FN_PREFIX, _size)
-#define fn_slab_print     CONCAT2(SLAB_FN_PREFIX, _print)
+#define fn_slab_print_out CONCAT2(SLAB_FN_PREFIX, _print_out)
+#define fn_slab_print_err CONCAT2(SLAB_FN_PREFIX, _print_err)
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,23 +48,24 @@ struct struct_block;
 typedef struct struct_slab struct_slab;
 typedef struct struct_block struct_block;
 
-struct_block*   fn_block_create (struct_block* block);
-void            fn_block_destroy(struct_block* block);
+struct_block*   fn_block_create   (struct_block* block);
+void            fn_block_destroy  (struct_block* block);
 
-struct_slab*    fn_slab_create  (struct_slab* slab);
-void            fn_slab_destroy (struct_slab* slab);
+struct_slab*    fn_slab_create    (struct_slab* slab);
+void            fn_slab_destroy   (struct_slab* slab);
 
-void            fn_slab_rdlock  (struct_slab* slab);
-void            fn_slab_wrlock  (struct_slab* slab);
-void            fn_slab_rdunlock(struct_slab* slab);
-void            fn_slab_wrunlock(struct_slab* slab);
+void            fn_slab_rdlock    (struct_slab* slab);
+void            fn_slab_wrlock    (struct_slab* slab);
+void            fn_slab_rdunlock  (struct_slab* slab);
+void            fn_slab_wrunlock  (struct_slab* slab);
 
-void            fn_slab_clear   (struct_slab* slab);
-void            fn_slab_free    (struct_slab* slab, SLAB_DATA_TYPE* ptr);
-SLAB_DATA_TYPE* fn_slab_alloc   (struct_slab* slab);
+void            fn_slab_clear     (struct_slab* slab);
+void            fn_slab_free      (struct_slab* slab, SLAB_DATA_TYPE* ptr);
+SLAB_DATA_TYPE* fn_slab_alloc     (struct_slab* slab);
 
-size_t          fn_slab_size    (struct_slab* slab);
-void            fn_slab_print   (struct_slab* slab);
+size_t          fn_slab_size      (struct_slab* slab);
+void            fn_slab_print_out (struct_slab* slab);
+void            fn_slab_print_err (struct_slab* slab);
 
 #if (defined(SLAB_STRUCT) || defined(SLAB_IMPLEMENTATION)) && !defined(SLAB_NOT_STRUCT)
   struct struct_block {
@@ -227,9 +229,13 @@ size_t          fn_slab_size(struct_slab* slab) {
   BLOP_ASSERT_PTR(slab);
   return slab->total;
 }
-void            fn_slab_print(struct_slab* slab) {
+void            fn_slab_print_out(struct_slab* slab) {
   BLOP_ASSERT_PTR(slab);
-  LOG_STDOUT("Slab Information:\n Allocated pointers: %zu\n Total bytes allocated: %zu\n\n", slab->total, slab->total * sizeof(SLAB_DATA_TYPE));
+  LOG_STDOUT("Slab Information:\n Allocated " STR(SLAB_DATA_TYPE) "('s): %zu\n Total bytes allocated: %zu\n\n", slab->total, slab->total * sizeof(SLAB_DATA_TYPE));
+}
+void            fn_slab_print_err(struct_slab* slab) {
+  BLOP_ASSERT_PTR(slab);
+  LOG_STDERR("Slab Information:\n Allocated " STR(SLAB_DATA_TYPE) "('s): %zu\n Total bytes allocated: %zu\n\n", slab->total, slab->total * sizeof(SLAB_DATA_TYPE));
 }
 
 #endif /* SLAB_IMPLEMENTATION */
@@ -248,17 +254,20 @@ void            fn_slab_print(struct_slab* slab) {
 #undef SLAB_NOT_STRUCT
 #undef SLAB_IMPLEMENTATION
 
-#define struct_slab
+#undef struct_slab
 
-#define fn_slab_create
-#define fn_slab_destroy
+#undef fn_slab_create
+#undef fn_slab_destroy
 
-#define fn_slab_rdlock
-#define fn_slab_wrlock
-#define fn_slab_rdunlock
-#define fn_slab_wrunlock
+#undef fn_slab_rdlock
+#undef fn_slab_wrlock
+#undef fn_slab_rdunlock
+#undef fn_slab_wrunlock
 
-#define fn_slab_clear
-#define fn_slab_free
-#define fn_slab_alloc
-#define fn_slab_size
+#undef fn_slab_clear
+#undef fn_slab_free
+#undef fn_slab_alloc
+
+#undef fn_slab_size
+#undef fn_slab_print_out
+#undef fn_slab_print_err

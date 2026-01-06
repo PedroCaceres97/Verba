@@ -1,86 +1,99 @@
 #include <verba/tui.h>
 
 /* --------------------------------------------------------------------------
- * TUI State
+ * Helpers
  * -------------------------------------------------------------------------- */
 
-static tui_screen screen = {0};
+static int changed = false;
+static char tui_buffer[64 * 1024] = {0};
+static char* tui_cursor = tui_buffer;
+static const char* tui_last_bg = NULL;
+static const char* tui_last_fg = NULL;
 
-void tui_init() {
-  #ifdef OS_WINDOWS
-    screen.cns_old.in_cp = GetConsoleCP();
-    screen.cns_old.out_cp = GetConsoleOutputCP();
-    screen.cns_old.in_handle = GetStdHandle(STD_INPUT_HANDLE);
-    screen.cns_old.out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-    ASSERT_FORCED(screen.cns_old.in_handle != INVALID_HANDLE_VALUE, "Function failed -> GetStdHandle(STD_INPUT_HANDLE)");
-    ASSERT_FORCED(screen.cns_old.out_handle != INVALID_HANDLE_VALUE, "Function failed -> GetStdHandle(STD_OUTPUT_HANDLE)");
-    ASSERT_FORCED(GetConsoleMode(screen.cns_old.in_handle, &screen.cns_old.in_mode) != 0, "Function failed -> GetConsoleMode(screen.cns_old.in_handle, &screen.cns_old.in_mode)");
-    ASSERT_FORCED(GetConsoleMode(screen.cns_old.out_handle, &screen.cns_old.out_mode) != 0, "Function failed -> GetConsoleMode(screen.cns_old.out_handle, &screen.cns_old.out_mode)");
-
-    screen.cns.in_cp = CP_UTF8;
-    screen.cns.out_cp = CP_UTF8;
-    screen.cns.in_handle = screen.cns_old.in_handle;
-    screen.cns.out_handle = screen.cns_old.out_handle;
-    screen.cns.out_mode = (screen.cns_old.out_mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT)) | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT;
-    
-    SetConsoleCP(screen.cns.in_cp);
-    SetConsoleOutputCP(screen.cns.out_cp);
-    ASSERT_FORCED(SetConsoleMode(screen.cns.out_handle, screen.cns.out_mode) != 0, "Function failed -> SetConsoleMode(screen.cns.out_handle, screen.cns.out_mode)");
-    LOG_DEBUG("Function success -> SetConsoleMode(screen.cns.out_handle, screen.cns.out_mode)");
-    
-    printf(ANSI_CLEAR_SCREEN ANSI_CURSOR_HIDE);
-
-    CONSOLE_SCREEN_BUFFER_INFO info;
-    ASSERT_FORCED(GetConsoleScreenBufferInfo(screen.cns.out_handle, &info), "Function failed ->GetConsoleScreenBufferInfo(screen.cns.out_handle, &info)");
-    LOG_DEBUG("Function success -> GetConsoleScreenBufferInfo(screen.cns.out_handle, &info)");
-    
-    screen.w = info.srWindow.Right - info.srWindow.Left + 1;
-    screen.h = info.srWindow.Bottom - info.srWindow.Top + 1;
-  #else
-
-  #endif
-
-  tui_box_create(&screen.header, 0, 0, screen.w, 1, TUI_LINE);
-  tui_box_style(&screen.header, ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK, ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK);
-  tui_box_text(&screen.header, "Bienvenido a Verba - Developer Version", TUI_TEXT_CENTER_X | TUI_TEXT_CENTER_Y);
-  tui_box_pad(&screen.header, 0, 0, 0, 0);
-
-  tui_box_create(&screen.footer, 0, screen.h, screen.w, 1, TUI_LINE);
-  tui_box_style(&screen.footer, ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK, ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK);
-  tui_box_text(&screen.footer, "(ESC = Salir)", TUI_TEXT_CENTER_X | TUI_TEXT_CENTER_Y);
-  tui_box_pad(&screen.footer, 0, 0, 0, 0);
-
-  LOG_DEBUG("Variables initialized, drawing...");
-
-  tui_draw(&screen.header);
-  tui_draw(&screen.footer);
+static inline void tui_emit(const char* s, size_t n) {
+  memcpy(tui_cursor, s, n);
+  tui_cursor += n;
+  changed = true;
 }
-void tui_cleanup() {
-  LOG_DEBUG("TUI Cleanup");
+static inline void tui_emit_bg(const char* bg) {
+  if (tui_last_bg != bg) {
+    tui_last_bg = bg;
+    size_t n = strlen(bg);
+    memcpy(tui_cursor, bg, n);
+    tui_cursor += n;
+    changed = true;
+  }
+}
+static inline void tui_emit_fg(const char* fg) {
+  if (tui_last_fg != fg) {
+    tui_last_fg = fg;
+    size_t n = strlen(fg);
+    memcpy(tui_cursor, fg, n);
+    tui_cursor += n;
+    changed = true;
+  }
+}
+static inline void tui_emit_pos(int x, int y) {
+  int i = 0;
+  char temp[16] = {0};
+  
+  *tui_cursor++ = '\x1b';
+  *tui_cursor++ = '[';
 
-  printf(ANSI_CLEAR_SCREEN ANSI_CURSOR_HOME ANSI_CURSOR_SHOW);
+  do {
+    temp[i++] = '0' + (y % 10);
+    y /= 10;
+  } while(y != 0);
+  while(i > 0) {
+    *tui_cursor++ = temp[--i];
+  }
 
-  #ifdef OS_WINDOWS
-    SetConsoleCP(screen.cns_old.in_cp);
-    SetConsoleOutputCP(screen.cns_old.out_cp);
-    ASSERT_FORCED(SetConsoleMode(screen.cns_old.out_handle, screen.cns_old.out_mode) != 0, "Function failed -> SetConsoleMode(screen.cns_old.out_handle, screen.cns_old.out_mode)");
-  #else
+  *tui_cursor++ = ';';
 
-  #endif
+  do {
+    temp[i++] = '0' + (x % 10);
+    x /= 10;
+  } while(x != 0);
+  while(i > 0) {
+    *tui_cursor++ = temp[--i];
+  }
+  
+  *tui_cursor++ = 'H';
+  changed = true;
+}
+static inline void tui_emit_spaces(size_t count) {
+  memset(tui_cursor, ' ', count);
+  tui_cursor += count;
+  changed = true;
 }
 
-int tui_screenw() {
-  return screen.w;
+static void tui_fill(int x, int y, const char* bg, size_t count) {
+  tui_emit_pos(x, y);
+  tui_emit_bg(bg);
+  tui_emit_spaces(count);
 }
-int tui_screenh() {
-  return screen.h;
+static void tui_puts(int x, int y, const char* bg, const char* fg, const char* text, size_t count) {
+  tui_emit_pos(x, y);
+  tui_emit_bg(bg);
+  tui_emit_fg(fg);
+  tui_emit(text, count);
+}
+void tui_print(void) {
+  if (!changed) { return; }
+
+  fwrite(tui_buffer, 1, tui_cursor - tui_buffer, stdout);
+  memset(tui_buffer, 0, sizeof(tui_buffer));
+  tui_cursor = tui_buffer;
+  tui_last_bg = NULL;
+  tui_last_fg = NULL;
+  changed = false;
 }
 
 /* --------------------------------------------------------------------------
  * Key Input
  * -------------------------------------------------------------------------- */
 
-void tui_getkey(tui_key* key) {
+void      tui_getkey(tui_key* key) {
   #ifdef OS_WINDOWS
     INPUT_RECORD rec;
     DWORD count = 0;
@@ -89,9 +102,9 @@ void tui_getkey(tui_key* key) {
     key->mod  = TUI_MOD_NONE;
     key->ch   = 0;
 
-    if (!PeekConsoleInput(screen.cns.in_handle, &rec, 1, &count) || count == 0) { return; }
+    if (!PeekConsoleInput(tui_screen.cns.in_handle, &rec, 1, &count) || count == 0) { return; }
 
-    ReadConsoleInput(screen.cns.in_handle, &rec, 1, &count);
+    ReadConsoleInput(tui_screen.cns.in_handle, &rec, 1, &count);
 
     if (rec.EventType != KEY_EVENT) { return; }
 
@@ -151,39 +164,64 @@ void tui_getkey(tui_key* key) {
  * Text
  * -------------------------------------------------------------------------- */
 
-static size_t tui_format_line(const char* text, String* line) {
-  const char* nl = strchr(text, '\n');
-  size_t size = nl ? (size_t)(nl - text) : strlen(text);
+size_t    tui_format_line(const char* raw, String* line) {
+  const char* nl = strchr(raw, '\n');
+  size_t size = TERNARY(nl != NULL, (size_t)(nl - raw), strlen(raw));
 
-  string_resize(&line, size);
-  string_strcpy(&line, 0, text, size);
+  string_resize(line, size);
+  string_strcpy(line, 0, raw, size);
 
   return size + (nl != NULL);
 }
 
-static void tui_format_lines(const char* text, VECstr* lines) {
-  size_t len = strlen(text);
+/* --------------------------------------------------------------------------
+ * File
+ * -------------------------------------------------------------------------- */
 
+tui_file* tui_file_create(tui_file* file, const char* raw, int write) {
+  if (!file) {
+    file = mem_calloc(struct tui_file, 1);
+    file->allocated = true;
+  } else {
+    file->allocated = false;
+  }
+  file->off_x = 0;
+  file->off_y = 0;
+  file->pos_x = 0;
+  file->pos_y = 0;
+  file->write = write;
+  vecstr_create(&file->text);
+
+  size_t len = strlen(raw);
   while(true) {
-    String* line = mem_slabstr_alloc();
-    size_t parsed = tui_format_line(text, line);
-    tui_lines_push_back(lines, line);
+    String* line = mem_string_alloc();
+    size_t parsed = tui_format_line(raw, line);
+    vecstr_push_back(&file->text, line);
     if (parsed == len) {
       break;
     } else {
+      raw += parsed;
       len -= parsed;
-      text += parsed;
     }
   };
-};
+  return file;
+}
+void      tui_file_destroy(tui_file* file) {
+  vecstr_clear(&file->text);
+  vecstr_destroy(&file->text);
+
+  if (file->allocated) {
+    mem_free(file);
+  }
+}
 
 /* --------------------------------------------------------------------------
  * Box
  * -------------------------------------------------------------------------- */
 
-tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h, tui_box_type type) {
+tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h) {
   if (!box) {
-    box = mem_calloc(tui_box, 1, "struct tui_box");
+    box = mem_calloc(struct tui_box, 1);
     box->allocated = true;
   } else {
     box->allocated = false;
@@ -193,47 +231,18 @@ tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h, tui_box_type 
   box->y = y;
   box->w = w;
   box->h = h;
-  box->type = type;
-
-  switch (type) {
-    case TUI_LINE: {
-      box->data.line = mem_slabstr_alloc();
-      break;
-    }
-    case TUI_PAGE: {
-      vecstr_create(&box->data.page.text);
-      break;
-    }
-    case TUI_FILE: {
-      vecstr_create(&box->data.file.text);
-      break;
-    }
-    
-    default:
-      break;
-  }
+  box->up = 0;
+  box->lt = 0;
+  box->dn = 0;
+  box->rt = 0;
+  box->bg_1 = ANSI_BG_WHITE;
+  box->bg_2 = ANSI_BG_BLACK;
+  box->fg_1 = ANSI_FG_BLACK;
+  box->fg_2 = ANSI_FG_WHITE;
 
   return box;
 }
 void      tui_box_destroy(tui_box* box) {
-  switch (box->type) {
-    case TUI_LINE: {
-      mem_slabstr_free(box->data.line);
-      break;
-    }
-    case TUI_PAGE: {
-      vecstr_destroy(&box->data.page.text);
-      break;
-    }
-    case TUI_FILE: {
-      vecstr_destroy(&box->data.file.text);
-      break;
-    }
-    
-    default:
-      break;
-  }
-
   if (box->allocated) {
     mem_free(box);
   }
@@ -245,61 +254,21 @@ void      tui_box_pad(tui_box* box, int up, int right, int down, int left) {
   box->dn = down;
   box->lt = left;
 }
-void      tui_box_text(tui_box* box, const char* text, tui_text_align align) {
-  box->align = align;
-
-  switch (box->type) {
-    case TUI_LINE: {
-      tui_format_line(text, box->data.line);
-      break;
-    }
-    case TUI_PAGE: {
-      tui_format_lines(text, &box->data.page.text);
-      break;
-    }
-    case TUI_FILE: {
-      tui_format_lines(text, &box->data.file.text);
-      break;
-    }
-    
-    default:
-      break;
-  }
-}
-void      tui_box_style(tui_box* box, const char* bg, const char* fg, const char* bg_s, const char* fg_s) {
-  box->style.bg   = bg;
-  box->style.fg   = fg;
-  box->style.bg_s = bg_s;
-  box->style.fg_s = fg_s;
+void      tui_box_style(tui_box* box, const char* bg_1, const char* bg_2, const char* fg_1, const char* fg_2) {
+  box->bg_1 = bg_1;
+  box->bg_2 = bg_2;
+  box->fg_1 = fg_1;
+  box->fg_2 = fg_2;
 }
 
-static void tui_fill(size_t count, int x, int y, const char* bg);
-static void tui_puts(const char* text, size_t count, int x, int y, const char* bg, const char* fg);
-
-static void tui_draw_line(tui_box* box);
-static void tui_draw_page(tui_box* box);
-
-void tui_draw(tui_box* box) {
-  char pos[64] = {0};
-
-  LOG_DEBUG("Drawing...");
+void      tui_box_clear(tui_box* box) {
   for (int y = 0; y < box->h; y++) {
-    tui_fill(box->w, box->x, box->y + y, box->style.bg);
-  }
-
-  switch(box->type) {
-    case TUI_LINE: {
-      tui_draw_line(box);
-      break;
-    }
-    case TUI_PAGE: {
-      tui_draw_page(box);
-      break;
-    }
+    tui_fill(box->x, box->y + y, box->bg_1, box->w);
   }
 }
+void      tui_box_write_line(tui_box* box, String* line, tui_align align) {
+  tui_box_clear(box);
 
-static void tui_draw_line(tui_box* box) {
   int pos_x = box->x + box->lt;
   int pos_y = box->y + box->up;
   int max_x = box->w - box->lt - box->rt;
@@ -307,80 +276,124 @@ static void tui_draw_line(tui_box* box) {
   int align_x = 0;
   int align_y = 0;
 
-  String* line = box->data.line;
-  size_t len = line->size;
+  int len = (int)line->size;
   const char* cstr = line->data;
 
-  LOG_DEBUG("Drawing line...");
-
-  if (box->align & TUI_TEXT_CENTER_Y) {
-    align_y = max_y / 2 + ((max_x % 2) == 0);
-  } else if (box->align & TUI_TEXT_DOWN) {
+  if (align & TUI_CENTER_Y) {
+    align_y = max_y / 2 + ((max_y % 2) == 0);
+  } else if (align & TUI_DOWN) {
     align_y = max_y - 1;
   }
   pos_y += align_y;
 
   if (len > max_x) {
-    tui_puts(cstr, max_x - 3, pos_x, pos_y, box->style.bg, box->style.fg);
-    tui_puts("...", 3, pos_x + max_x - 3, pos_y, box->style.bg, box->style.fg);
+    tui_puts(pos_x, pos_y, box->bg_1, box->fg_1, cstr, max_x - 3);
+    tui_puts(pos_x + max_x - 3, pos_y, box->bg_1, box->fg_1, "...", 3);
     return;
   }
 
-  if (box->align & TUI_TEXT_CENTER_X) {
+  if (align & TUI_CENTER_X) {
     align_x = (max_x - len) / 2 + (((max_x - len) % 2) == 0);
-  } else if (box->align & TUI_TEXT_RIGHT) {
+  } else if (align & TUI_RIGHT) {
     align_x = max_x - len;
   }
   pos_x += align_x;
 
-  tui_puts(cstr, len, pos_x, pos_y, box->style.bg, box->style.fg);
+  tui_puts(pos_x, pos_y, box->bg_1, box->fg_1, cstr, len);
   return;
 }
-static void tui_draw_page(tui_box* box) {
+void      tui_box_write_file(tui_box* box, tui_file* file) {
+  tui_box_clear(box);
+
   int pos_x = box->x + box->lt;
   int pos_y = box->y + box->up;
   int max_x = box->w - box->lt - box->rt;
   int max_y = box->h - box->up - box->dn;
-  int align_x = 0;
-  int align_y = 0;
 
-  LOG_DEBUG("Drawing page...");
+  for (int y = 0; y < max_y; y++) {
+    String* line = vecstr_get(&file->text, y + file->off_y);
+    int len = MIN((int)line->size, max_x);
 
-  for (int i = 0; i < box->data.page.text.size && i < max_y; i++) {
-    String* line = vecstr_get(&box->data.page.text, i); 
-    size_t len = line->size;
-    const char* cstr = line->data;
-    tui_puts(cstr, MIN(len, max_x), pos_x, pos_y + i, box->style.bg, box->style.fg);
+    if (len > 0) {
+      tui_puts(pos_x, pos_y + y, box->bg_1, box->fg_1, line->data, len);
+    }
+
+    if (len < max_x) {
+      tui_fill(pos_x + len, pos_y + y, box->bg_1, max_x - len);
+    }
   }
 }
 
-static void tui_fill(size_t count, int x, int y, const char* bg) {
-  char pos[64] = {0};
+/* --------------------------------------------------------------------------
+ * TUI State
+ * -------------------------------------------------------------------------- */
 
-  /*
-    1. %s     Sets cursor position
-    2. %s     Sets background color
-    4. %*.0s  Writes exactly count bytes of empty space
-    5. %s     Resets color
-  */
-  printf("%s%s%*.0s%s",
-          ansi_cursor_pos(pos, x, y),
-          bg, count, "",
-          ANSI_RESET);
+tui_screen_t tui_screen = {0};
+String* header = NULL;
+String* footer = NULL;
+
+void tui_init(void) {
+  #ifdef OS_WINDOWS
+    tui_screen.cns_old.in_cp = GetConsoleCP();
+    tui_screen.cns_old.out_cp = GetConsoleOutputCP();
+    tui_screen.cns_old.in_handle = GetStdHandle(STD_INPUT_HANDLE);
+    tui_screen.cns_old.out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    ASSERT_FORCED(tui_screen.cns_old.in_handle != INVALID_HANDLE_VALUE, "Function failed -> GetStdHandle(STD_INPUT_HANDLE)");
+    ASSERT_FORCED(tui_screen.cns_old.out_handle != INVALID_HANDLE_VALUE, "Function failed -> GetStdHandle(STD_OUTPUT_HANDLE)");
+    ASSERT_FORCED(GetConsoleMode(tui_screen.cns_old.in_handle, &tui_screen.cns_old.in_mode) != 0, "Function failed -> GetConsoleMode(tui_screen.cns_old.in_handle, &tui_screen.cns_old.in_mode)");
+    ASSERT_FORCED(GetConsoleMode(tui_screen.cns_old.out_handle, &tui_screen.cns_old.out_mode) != 0, "Function failed -> GetConsoleMode(tui_screen.cns_old.out_handle, &tui_screen.cns_old.out_mode)");
+
+    tui_screen.cns.in_cp = CP_UTF8;
+    tui_screen.cns.out_cp = CP_UTF8;
+    tui_screen.cns.in_handle = tui_screen.cns_old.in_handle;
+    tui_screen.cns.out_handle = tui_screen.cns_old.out_handle;
+    tui_screen.cns.out_mode = tui_screen.cns_old.out_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT;
+    
+    SetConsoleCP(tui_screen.cns.in_cp);
+    SetConsoleOutputCP(tui_screen.cns.out_cp);
+    ASSERT_FORCED(SetConsoleMode(tui_screen.cns.out_handle, tui_screen.cns.out_mode) != 0, "Function failed -> SetConsoleMode(tui_screen.cns.out_handle, tui_screen.cns.out_mode)");
+    
+    printf(ANSI_CLEAR_SCREEN ANSI_CURSOR_HIDE);
+
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    ASSERT_FORCED(GetConsoleScreenBufferInfo(tui_screen.cns.out_handle, &info), "Function failed ->GetConsoletui_screenBufferInfo(tui_screen.cns.out_handle, &info)");
+    
+    tui_screen.w = info.srWindow.Right - info.srWindow.Left + 1;
+    tui_screen.h = info.srWindow.Bottom - info.srWindow.Top + 1;
+  #else
+
+  #endif
+
+  tui_box_create(&tui_screen.header, 0, 0, tui_screen.w, 1);
+  tui_box_style(&tui_screen.header, ANSI_BG_RGB(39, 247, 27), ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK, ANSI_FG_BLACK);
+
+  tui_box_create(&tui_screen.footer, 0, tui_screen.h, tui_screen.w, 1);
+  tui_box_style(&tui_screen.footer, ANSI_BG_RGB(39, 247, 27), ANSI_BG_RGB(39, 247, 27), ANSI_FG_BLACK, ANSI_FG_BLACK);
+
+  header = mem_string_alloc();
+  footer = mem_string_alloc();
+
+  tui_format_line("Bienvenido a Verba - Developer Version", header);
+  tui_format_line("(ESC = Salir)", footer);
+
+  tui_box_write_line(&tui_screen.header, header, TUI_CENTER_X);
+  tui_box_write_line(&tui_screen.footer, footer, TUI_CENTER_X);
+
+  LOG_SUCCESS("Tui initialized");
 }
-static void tui_puts(const char* text, size_t count, int x, int y, const char* bg, const char* fg) {
-  char pos[64] = {0};
+void tui_cleanup(void) {
+  printf(ANSI_RESET ANSI_CLEAR_SCREEN ANSI_CURSOR_HOME ANSI_CURSOR_SHOW);
 
-  /*
-    1. %s     Sets cursor position
-    2. %s     Sets background color
-    3. %s     Sets foreground color
-    4. %.*s   Writes exactly count bytes of text
-    5. %s     Resets color
-  */
-  printf("%s%s%s%.*s%s",
-          ansi_cursor_pos(pos, x, y),
-          bg, fg,
-          count, text,
-          ANSI_RESET);
+  mem_string_free(header);
+  mem_string_free(footer);
+
+  #ifdef OS_WINDOWS
+    SetConsoleCP(tui_screen.cns_old.in_cp);
+    SetConsoleOutputCP(tui_screen.cns_old.out_cp);
+    ASSERT_FORCED(SetConsoleMode(tui_screen.cns_old.out_handle, tui_screen.cns_old.out_mode) != 0, "Function failed -> SetConsoleMode(tui_screen.cns_old.out_handle, tui_screen.cns_old.out_mode)");
+  #else
+
+  #endif
+
+  LOG_SUCCESS("Tui terminated");
 }

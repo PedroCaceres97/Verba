@@ -532,6 +532,9 @@ static inline NORETURN void ABORT() {
  * WRAPPERS
  * -------------------------------------------------------------------------- */
 
+#define STR_IMPL(x) #x
+#define STR(x) STR_IMPL(x)
+
 #define CONCAT2_IMPL(a, b)     a##b
 #define CONCAT3_IMPL(a, b, c)  a##b##c
 

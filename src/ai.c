@@ -41,7 +41,7 @@ static size_t write_cb(void *contents, size_t size, size_t nmemb, void *userp) {
   return realsize;
 }
 
-void ai_init() {
+void ai_init(void) {
   ai.api_key    = "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";
   ai.model      = "xiaomi/mimo-v2-flash:free";
   ai.max_tokens = 2048;
@@ -59,7 +59,7 @@ void ai_init() {
   curl_easy_setopt(ai.curl, CURLOPT_HTTPHEADER, ai.headers);
   curl_easy_setopt(ai.curl, CURLOPT_WRITEFUNCTION, write_cb);
   /* TLS (LibreSSL) */
-  curl_easy_setopt(ai.curl, CURLOPT_CAINFO, "C:/Dev/Libs/curl-8.17.0_5-win64-mingw/cacert.pem");
+  curl_easy_setopt(ai.curl, CURLOPT_CAINFO, "cacert.pem");
 
   ai.request = cJSON_CreateObject();
   cJSON_AddStringToObject(ai.request, "model", ai.model);
@@ -74,15 +74,18 @@ void ai_init() {
 
   ai.last = NULL;
   ai.attached_disk = false;
+
+  LOG_SUCCESS("Ai Initialized");
 }
-void ai_cleanup() {
-  LOG_DEBUG("Ai Cleanup");
+void ai_cleanup(void) {
   if (ai.last) {
     free((void*)ai.last);
   }
   cJSON_Delete(ai.request);
   curl_slist_free_all(ai.headers);
   curl_easy_cleanup(ai.curl);
+
+  LOG_SUCCESS("Ai Terminated");
 }
 
 void ai_message(const char* message) {
@@ -133,7 +136,7 @@ void ai_message(const char* message) {
   free(json_body);
   free(response.data);
 }
-const char* ai_last() {
+const char* ai_last(void) {
   return ai.last;
 }
 
@@ -148,6 +151,6 @@ void        ai_attach_disk(const char* data) {
   cJSON_AddStringToObject(disk, "content", data);
   cJSON_InsertItemInArray(ai.messages, 1, disk); 
 }
-void        ai_dettach_disk() {
+void        ai_dettach_disk(void) {
   cJSON_DeleteItemFromArray(ai.messages, 1);
 }

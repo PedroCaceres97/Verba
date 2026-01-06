@@ -58,5 +58,6 @@ dkms.conf
 .vscode/
 debug.bat
 release.bat
+bin/
 debug/
 release/

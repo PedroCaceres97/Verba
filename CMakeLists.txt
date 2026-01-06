@@ -4,6 +4,7 @@ project(verba LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(dependencies.cmake)
 
@@ -12,11 +13,11 @@ include(dependencies.cmake)
 # -----------------------------
 
 add_executable(verba
+    src/blop.c
     src/ai.c
     src/log.c
     src/mem.c
     src/tui.c
-    src/blop.c
     src/main.c
     ${CJSON_LIBRARY_DIR}/cJSON.c
 )
@@ -27,12 +28,27 @@ target_include_directories(verba PRIVATE
     ${CJSON_INCLUDE_DIR}
 )
 
+target_compile_options(verba PRIVATE
+    -Wall
+    -Wextra
+    -Werror=implicit-function-declaration
+)
+
 target_link_directories(verba PRIVATE
     ${CURL_ROOT}/lib
 )
 
 target_link_libraries(verba PRIVATE
     curl
+)
+
+add_custom_command(TARGET verba POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:verba>
+        ${CMAKE_SOURCE_DIR}/bin/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CURL_ROOT}/bin/libcurl-x64.dll
+        ${CMAKE_SOURCE_DIR}/bin/
 )
 
 # -----------------------------

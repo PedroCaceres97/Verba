@@ -28,9 +28,10 @@
 #define fn_memtrack_realloc   CONCAT2(MEMTRACK_FN_PREFIX, _realloc)
 #define fn_memtrack_duplicate CONCAT2(MEMTRACK_FN_PREFIX, _duplicate)
 
-#define fn_memtrack_print     CONCAT2(MEMTRACK_FN_PREFIX, _print)
 #define fn_memtrack_bytes     CONCAT2(MEMTRACK_FN_PREFIX, _bytes)
 #define fn_memtrack_count     CONCAT2(MEMTRACK_FN_PREFIX, _count)
+#define fn_memtrack_print_out CONCAT2(MEMTRACK_FN_PREFIX, _print_out)
+#define fn_memtrack_print_err CONCAT2(MEMTRACK_FN_PREFIX, _print_err)
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,30 +59,29 @@ void*             fn_memtrack_duplicate (struct_memtrack* memtrack, Context cont
 
 size_t            fn_memtrack_bytes     (struct_memtrack* memtrack);
 size_t            fn_memtrack_count     (struct_memtrack* memtrack);
-void              fn_memtrack_print     (struct_memtrack* memtrack);
+void              fn_memtrack_print_out (struct_memtrack* memtrack);
+void              fn_memtrack_print_err (struct_memtrack* memtrack);
 
-#if (defined(MEMTRACK_STRUCT) || defined(MEMTRACK_IMPLEMENTATION)) && !defined(MEMTRACK_NOT_STRUCT)
-  #define LIST_NAME           track_list
-  #define NODE_NAME           track_node
-  #define LIST_DATA_TYPE      struct_ptrhdr*
-  #define LIST_STRUCT
-  #include <blop/list.h>
+#define LIST_NAME           track_list
+#define NODE_NAME           track_node
+#define LIST_DATA_TYPE      struct_ptrhdr*
+#define LIST_STRUCT
+#include <blop/list.h>
 
-  struct struct_ptrhdr {
-    struct_memtrack*  memtrack;
-    track_node        node;
-    size_t            size;
-    Context           context;
-  };
+struct struct_ptrhdr {
+  struct_memtrack*  memtrack;
+  track_node        node;
+  size_t            size;
+  Context           context;
+};
 
-  struct struct_memtrack {
-    RWLOCK_TYPE       lock;
-    track_list        ptrs;
-    size_t            bytes;
-    Context           context;
-    int               allocated;
-  };
-#endif /* (defined(MEMTRACK_STRUCT) || defined(MEMTRACK_IMPLEMENTATION)) && !defined(MEMTRACK_NOT_STRUCT) */
+struct struct_memtrack {
+  RWLOCK_TYPE       lock;
+  track_list        ptrs;
+  size_t            bytes;
+  Context           context;
+  int               allocated;
+};
 
 #ifdef MEMTRACK_IMPLEMENTATION
 
@@ -117,7 +117,9 @@ void              fn_memtrack_destroy(struct_memtrack* memtrack) {
   BLOP_ASSERT(memtrack->ptrs.size == 0, "Destroying non empty memtrack (HINT: Call free all)");
 
   track_list_destroy(&memtrack->ptrs);
-  FREE(memtrack);
+  if (memtrack->allocated) {
+    FREE(memtrack);
+  }
 }
 
 void              fn_memtrack_rdlock(struct_memtrack* memtrack) {
@@ -241,7 +243,7 @@ size_t            fn_memtrack_count(struct_memtrack* memtrack) {
   BLOP_ASSERT_PTR(memtrack);
   return memtrack->ptrs.size;
 }
-void              fn_memtrack_print(struct_memtrack* memtrack) {
+void              fn_memtrack_print_out(struct_memtrack* memtrack) {
   BLOP_ASSERT_PTR(memtrack);
 
   LOG_STDOUT("%s", "Memtrack Information:\n");
@@ -264,6 +266,33 @@ void              fn_memtrack_print(struct_memtrack* memtrack) {
     LOG_STDOUT("  Alias: %s\n", hdr->context.alias);
     LOG_STDOUT("  Addres: %p\n", MEMTRACK_HDR_TO_PTR(hdr));
     LOG_STDOUT("  Origin context: %s:%u (%s)\n\n", hdr->context.file, hdr->context.line, hdr->context.func);
+    current = current->next;
+    index++;
+  }
+}
+void              fn_memtrack_print_err(struct_memtrack* memtrack) {
+  BLOP_ASSERT_PTR(memtrack);
+
+  LOG_STDERR("%s", "Memtrack Information:\n");
+  LOG_STDERR(" Alias: %s\n", memtrack->context.alias);
+  LOG_STDERR(" Origin context: %s:%u (%s)\n", memtrack->context.file, memtrack->context.line, memtrack->context.func);
+  LOG_STDERR(" Allocated pointers: %zu\n", memtrack->ptrs.size);
+  LOG_STDERR(" Total bytes allocated: %zu\n\n", memtrack->bytes);
+
+  if (memtrack->bytes == 0) {
+    return;
+  }
+  
+  track_node* current = memtrack->ptrs.front;
+  LOG_STDERR("%s", "Individual Pointer Information\n");
+  size_t index = 0;
+  while (current != NULL) {
+    struct_ptrhdr* hdr = current->data;
+    LOG_STDERR(" Pointer [%zu]\n", index);
+    LOG_STDERR("  Size: %zu bytes\n", hdr->size);
+    LOG_STDERR("  Alias: %s\n", hdr->context.alias);
+    LOG_STDERR("  Addres: %p\n", MEMTRACK_HDR_TO_PTR(hdr));
+    LOG_STDERR("  Origin context: %s:%u (%s)\n\n", hdr->context.file, hdr->context.line, hdr->context.func);
     current = current->next;
     index++;
   }

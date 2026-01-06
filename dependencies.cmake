@@ -2,8 +2,8 @@
 # THIRD PARTY ROOT PATHS
 # ------------------------------------------------------------------
 
-set(CURL_ROOT  "${CMAKE_SOURCE_DIR}/curl")
-set(CJSON_ROOT "${CMAKE_SOURCE_DIR}")
+set(CURL_ROOT  "${CMAKE_SOURCE_DIR}/external/curl")
+set(CJSON_ROOT "${CMAKE_SOURCE_DIR}/external")
 
 set(CURL_LIBRARY_DIR "${CURL_ROOT}/lib")
 set(CJSON_LIBRARY_DIR "${CJSON_ROOT}/cJSON")

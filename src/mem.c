@@ -13,6 +13,7 @@ void    mem_free_(void* ptr) {
     tracker_free(&tracker, ptr);
   #else
     FREE(ptr);
+    allocations--;
   #endif
 }
 void*   mem_malloc_(size_t size, Context context) {
@@ -20,7 +21,9 @@ void*   mem_malloc_(size_t size, Context context) {
     return tracker_alloc(&tracker, context, size);
   #else
     void* ptr = NULL;
-    return MALLOC(ptr, void, size);
+    MALLOC(ptr, void, size);
+    allocations++;
+    return ptr;
   #endif
 }
 void*   mem_calloc_(size_t count, size_t size, Context context) {
@@ -28,7 +31,10 @@ void*   mem_calloc_(size_t count, size_t size, Context context) {
     return tracker_alloc(&tracker, context, size * count);
   #else
     void* ptr = NULL;
-    return MALLOC(ptr, void, size * count);
+    void* ptr = NULL;
+    MALLOC(ptr, void, size * count);
+    allocations++;
+    return ptr;
   #endif
 }
 void*   mem_realloc_(void* ptr, size_t size, Context context) {
@@ -40,14 +46,17 @@ void*   mem_realloc_(void* ptr, size_t size, Context context) {
   #endif
 }
 
-void    mem_slabstr_free(String* string) {
+void    mem_string_free(String* string) {
+  string_destroy(string);
   slabstr_free(&slabstr, string);
 }
-String* mem_slabstr_alloc() {
-  return slabstr_alloc(&slabstr);
+String* mem_string_alloc(void) {
+  String* string = slabstr_alloc(&slabstr);
+  string_create(string);
+  return string;
 }
 
-void    mem_init() {
+void    mem_init(void) {
 #ifndef NDEBUG
   tracker_create(&tracker, CONTEXT("Verba Memory Tracker"));
 #else
@@ -55,12 +64,14 @@ void    mem_init() {
 #endif
 
   slabstr_create(&slabstr);
+
+  LOG_SUCCESS("Mem initialized");
 }
-void    mem_cleanup() {
+void    mem_cleanup(void) {
 #ifndef NDEBUG
   if (tracker.bytes != 0) {
     LOG_FATAL("Memory leaks detected (Debug)");
-    tracker_print(&tracker);
+    tracker_print_err(&tracker);
     tracker_clear(&tracker);
     ABORT();
   }
@@ -72,9 +83,11 @@ void    mem_cleanup() {
 
   if (slabstr.total > 0) {
     LOG_FATAL("Memory leaks detected (Slab String)");
-    slabstr_print(&slabstr);
+    slabstr_print_err(&slabstr);
     slabstr_clear(&slabstr);
     ABORT();
   }
   slabstr_destroy(&slabstr);
+
+  LOG_SUCCESS("Mem terminated");
 }

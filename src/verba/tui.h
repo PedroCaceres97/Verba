@@ -61,76 +61,68 @@ typedef struct tui_key {
 void tui_getkey(tui_key* key);
 
 /* --------------------------------------------------------------------------
- * Box
+ * Line
  * -------------------------------------------------------------------------- */
 
-typedef struct tui_style {
-  const char* fg;
-  const char* bg;
-  const char* bg_s; /* Background when item is selected */
-  const char* fg_s; /* Foreground when item is selected */
-} tui_style;
+typedef enum tui_align {
+  TUI_CENTER_X = 1 << 0,
+  TUI_CENTER_Y = 1 << 1,
+  TUI_RIGHT    = 1 << 3,
+  TUI_DOWN     = 1 << 5
+} tui_align;
 
-typedef enum tui_box_type {
-  TUI_LINE,
-  TUI_PAGE,
-  TUI_FILE,
-  TUI_CONFIRM,
-  TUI_YES_NO,
-  TUI_MENU,
-  TUI_INPUT,
-  TUI_PARENT
-} tui_box_type;
+size_t tui_format_line(const char* raw, String* string);
 
-typedef enum tui_text_align {
-  TUI_TEXT_NONE     = 0,
-  TUI_TEXT_CENTER_X = 1 << 0,
-  TUI_TEXT_CENTER_Y = 1 << 1,
-  TUI_TEXT_LEFT     = 1 << 2,
-  TUI_TEXT_RIGHT    = 1 << 3,
-  TUI_TEXT_UP       = 1 << 4,
-  TUI_TEXT_DOWN     = 1 << 5
-} tui_text_align;
-
-typedef struct tui_page {
-  int     off_x;
-  int     off_y;
-  VECstr  text;
-} tui_page;
+/* --------------------------------------------------------------------------
+ * File
+ * -------------------------------------------------------------------------- */
 
 typedef struct tui_file {
+  int     allocated;
   int     off_x;
   int     off_y;
   int     pos_x;
   int     pos_y;
+  int     write;
   VECstr  text;
 } tui_file;
+
+tui_file* tui_file_create(tui_file* file, const char* raw, int write);
+void      tui_file_destroy(tui_file* file);
+
+/* --------------------------------------------------------------------------
+ * Box
+ * -------------------------------------------------------------------------- */
 
 typedef struct tui_box {
   int allocated;
   int x, y, w, h;       /* Coord x and y, width and height  */
   int up, rt, dn, lt;   /* Padding up, right, down and left */  
-  tui_style style;
-  tui_box_type type;
-  tui_text_align align;
-  
-  union {
-    String*   line;
-    tui_page  page;
-    tui_file  file;
-  } data;
-
-  void (*key)(tui_key);
+  const char* bg_1;     /* For unselected background */
+  const char* bg_2;     /* For selected background */
+  const char* fg_1;     /* For unselected foreground */
+  const char* fg_2;     /* For selected foreground */
 } tui_box;
 
-tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h, tui_box_type type);
+tui_box*  tui_box_create(tui_box* box, int x, int y, int w, int h);
 void      tui_box_destroy(tui_box* box);
 
 void      tui_box_pad(tui_box* box, int up, int right, int down, int left);
-void      tui_box_text(tui_box* box, const char* text, tui_text_align align);
-void      tui_box_style(tui_box* box, const char* bg, const char* fg, const char* bg_s, const char* fg_s);
+void      tui_box_style(tui_box* box, const char* bg_1, const char* bg_2, const char* fg_1, const char* fg_2);
 
-void      tui_draw(tui_box* box);
+void      tui_box_clear(tui_box* box);
+void      tui_box_write_line(tui_box* box, String* line, tui_align align);
+void      tui_box_write_file(tui_box* box, tui_file* file);
+
+/* --------------------------------------------------------------------------
+ * Window
+ * -------------------------------------------------------------------------- */
+
+typedef struct tui_window{
+  int hide_title;
+  tui_box title;
+  tui_box content;
+} tui_window;
 
 /* --------------------------------------------------------------------------
  * TUI State
@@ -149,7 +141,7 @@ typedef struct tui_console_status {
   #endif
 } tui_console_status;
 
-typedef struct tui_screen {
+typedef struct tui_screen_t {
   tui_box header;
   tui_box footer;
 
@@ -157,12 +149,13 @@ typedef struct tui_screen {
 
   tui_console_status cns;
   tui_console_status cns_old;
-} tui_screen;
+} tui_screen_t;
 
-void tui_init();
-void tui_cleanup();
+extern tui_screen_t tui_screen;
 
-int tui_screenw();
-int tui_screenh();
+void tui_init(void);
+void tui_cleanup(void);
+
+void tui_print(void);
 
 #endif /* __VERBA_TUI_H__ */
